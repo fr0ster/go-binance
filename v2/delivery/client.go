@@ -6,13 +6,14 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/adshao/go-binance/v2/common"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"time"
+
+	"github.com/adshao/go-binance/v2/common"
 
 	"github.com/bitly/go-simplejson"
 )
@@ -63,9 +64,9 @@ type UserDataEventType string
 type UserDataEventReasonType string
 
 // Endpoints
-const (
-	baseApiMainUrl    = "https://dapi.binance.com"
-	baseApiTestnetUrl = "https://testnet.binancefuture.com"
+var (
+	BaseApiMainUrl    = "https://dapi.binance.com"
+	BaseApiTestnetUrl = "https://testnet.binancefuture.com"
 )
 
 // Global enums
@@ -177,9 +178,9 @@ func newJSON(data []byte) (j *simplejson.Json, err error) {
 // getApiEndpoint return the base endpoint of the WS according the UseTestnet flag
 func getApiEndpoint() string {
 	if UseTestnet {
-		return baseApiTestnetUrl
+		return BaseApiTestnetUrl
 	}
-	return baseApiMainUrl
+	return BaseApiMainUrl
 }
 
 // NewClient initialize an API client instance with API key and secret key.
@@ -325,7 +326,7 @@ func (c *Client) callAPI(ctx context.Context, r *request, opts ...RequestOption)
 	if err != nil {
 		return []byte{}, err
 	}
-	data, err = ioutil.ReadAll(res.Body)
+	data, err = io.ReadAll(res.Body)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -489,4 +490,14 @@ func (c *Client) NewChangePositionModeService() *ChangePositionModeService {
 // NewGetPositionModeService init get position mode service
 func (c *Client) NewGetPositionModeService() *GetPositionModeService {
 	return &GetPositionModeService{c: c}
+}
+
+// NewGetFundingRateService init funding rate service
+func (c *Client) NewGetFundingInfoService() *GetFundingInfoService {
+	return &GetFundingInfoService{c: c}
+}
+
+// NewFundingRateService init funding rate service
+func (c *Client) NewFundingRateService() *FundingRateService {
+	return &FundingRateService{c: c}
 }

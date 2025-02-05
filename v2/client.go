@@ -4,16 +4,17 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/bitly/go-simplejson"
-	jsoniter "github.com/json-iterator/go"
 
 	"github.com/adshao/go-binance/v2/common"
 	"github.com/adshao/go-binance/v2/delivery"
@@ -109,17 +110,29 @@ type UserUniversalTransferType string
 // UserUniversalTransferStatus define the user universal transfer status
 type UserUniversalTransferStatusType string
 
+// FuturesOrderBookHistoryDataType define the futures order book history data types
+type FuturesOrderBookHistoryDataType string
+
+// FutureAlgoType define future algo types
+type FuturesAlgoType string
+
+// FutureAlgoUrgencyType define future algo urgency type
+type FuturesAlgoUrgencyType string
+
+// FutureAlgoOrderStatusType define future algo order status
+type FuturesAlgoOrderStatusType string
+
 // Endpoints
 var (
 	BaseAPIMainURL    = "https://api.binance.com"
 	BaseAPITestnetURL = "https://testnet.binance.vision"
 )
 
+// SelfTradePreventionMode define self trade prevention strategy
+type SelfTradePreventionMode string
+
 // UseTestnet switch all the API endpoints from production to the testnet
 var UseTestnet = false
-
-// Redefining the standard package
-var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 // Global enums
 const (
@@ -180,8 +193,10 @@ const (
 	MarginTransferTypeToMargin MarginTransferType = 1
 	MarginTransferTypeToMain   MarginTransferType = 2
 
-	FuturesTransferTypeToFutures FuturesTransferType = 1
-	FuturesTransferTypeToMain    FuturesTransferType = 2
+	FuturesTransferTypeToFutures       FuturesTransferType = 1
+	FuturesTransferTypeToMain          FuturesTransferType = 2
+	FuturesTransferTypeToFuturesCM     FuturesTransferType = 3
+	FuturesTransferTypeFuturesCMToMain FuturesTransferType = 4
 
 	MarginLoanStatusTypePending   MarginLoanStatusType = "PENDING"
 	MarginLoanStatusTypeConfirmed MarginLoanStatusType = "CONFIRMED"
@@ -287,6 +302,25 @@ const (
 	UserUniversalTransferStatusTypePending   UserUniversalTransferStatusType = "PENDING"
 	UserUniversalTransferStatusTypeConfirmed UserUniversalTransferStatusType = "CONFIRMED"
 	UserUniversalTransferStatusTypeFailed    UserUniversalTransferStatusType = "FAILED"
+
+	FuturesOrderBookHistoryDataTypeTDepth FuturesOrderBookHistoryDataType = "T_DEPTH"
+	FuturesOrderBookHistoryDataTypeSDepth FuturesOrderBookHistoryDataType = "S_DEPTH"
+
+	FuturesAlgoTypeVp   FuturesAlgoType = "VP"
+	FuturesAlgoTypeTwap FuturesAlgoType = "TWAP"
+
+	FuturesAlgoUrgencyTypeLow    FuturesAlgoUrgencyType = "LOW"
+	FuturesAlgoUrgencyTypeMedium FuturesAlgoUrgencyType = "MEDIUM"
+	FuturesAlgoUrgencyTypeHigh   FuturesAlgoUrgencyType = "HIGH"
+
+	FuturesAlgoOrderStatusTypeWorking   FuturesAlgoOrderStatusType = "WORKING"
+	FuturesAlgoOrderStatusTypeFinished  FuturesAlgoOrderStatusType = "FINISHED"
+	FuturesAlgoOrderStatusTypeCancelled FuturesAlgoOrderStatusType = "CANCELLED"
+
+	SelfTradePreventionModeNone        SelfTradePreventionMode = "NONE"
+	SelfTradePreventionModeExpireTaker SelfTradePreventionMode = "EXPIRE_TAKER"
+	SelfTradePreventionModeExpireBoth  SelfTradePreventionMode = "EXPIRE_BOTH"
+	SelfTradePreventionModeExpireMaker SelfTradePreventionMode = "EXPIRE_MAKER"
 )
 
 func currentTimestamp() int64 {
@@ -407,8 +441,12 @@ func (c *Client) parseRequest(r *request, opts ...RequestOption) (err error) {
 		r.setParam(timestampKey, currentTimestamp()-c.TimeOffset)
 	}
 	queryString := r.query.Encode()
+	// @ is a safe character and does not require escape, So replace it back.
+	queryString = strings.ReplaceAll(queryString, "%40", "@")
 	body := &bytes.Buffer{}
 	bodyString := r.form.Encode()
+	// @ is a safe character and does not require escape, So replace it back.
+	bodyString = strings.ReplaceAll(bodyString, "%40", "@")
 	header := http.Header{}
 	if r.header != nil {
 		header = r.header.Clone()
@@ -473,7 +511,7 @@ func (c *Client) callAPI(ctx context.Context, r *request, opts ...RequestOption)
 	if err != nil {
 		return []byte{}, err
 	}
-	data, err = ioutil.ReadAll(res.Body)
+	data, err = io.ReadAll(res.Body)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -1291,3 +1329,45 @@ func (c *Client) NewSubAccountTransactionStatisticsService() *SubAccountTransact
 func (c *Client) NewSubAccountFuturesAccountV2Service() *SubAccountFuturesAccountV2Service {
 	return &SubAccountFuturesAccountV2Service{c: c}
 }
+
+// Futures order book history service
+func (c *Client) NewFuturesOrderBookHistoryService() *FuturesOrderBookHistoryService {
+	return &FuturesOrderBookHistoryService{c: c}
+}
+
+// NewCreateFuturesAlgoVpOrderService create futures algo vp order
+func (c *Client) NewCreateFuturesAlgoVpOrderService() *CreateFuturesAlgoVpOrderService {
+	return &CreateFuturesAlgoVpOrderService{c: c}
+}
+
+// NewCreateFuturesAlgoTwapOrderService create futures algo twap order
+func (c *Client) NewCreateFuturesAlgoTwapOrderService() *CreateFuturesAlgoTwapOrderService {
+	return &CreateFuturesAlgoTwapOrderService{c: c}
+}
+
+// NewListOpenFuturesAlgoOrdersService list open futures algo orders
+func (c *Client) NewListOpenFuturesAlgoOrdersService() *ListOpenFuturesAlgoOrdersService {
+	return &ListOpenFuturesAlgoOrdersService{c: c}
+}
+
+// NewListHistoryFuturesAlgoOrdersService list history futures algo orders
+func (c *Client) NewListHistoryFuturesAlgoOrdersService() *ListHistoryFuturesAlgoOrdersService {
+	return &ListHistoryFuturesAlgoOrdersService{c: c}
+}
+
+// NewCancelFuturesAlgoOrderService cancel future algo order
+func (c *Client) NewCancelFuturesAlgoOrderService() *CancelFuturesAlgoOrderService {
+	return &CancelFuturesAlgoOrderService{c: c}
+}
+
+// NewGetFuturesAlgoSubOrdersService get futures algo sub orders
+func (c *Client) NewGetFuturesAlgoSubOrdersService() *GetFuturesAlgoSubOrdersService {
+	return &GetFuturesAlgoSubOrdersService{c: c}
+}
+
+// ----- simple earn service -----
+func (c *Client) NewSimpleEarnService() *SimpleEarnService {
+	return &SimpleEarnService{c: c}
+}
+
+// ----- end simple earn service -----
